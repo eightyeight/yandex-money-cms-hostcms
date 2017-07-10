@@ -390,7 +390,7 @@ class Shop_Payment_System_HandlerXX extends Shop_Payment_System_Handler
                     </tr>
                 <?php } ?>
             </table>
-            <?php if ($this->ym_smartpay && ($this->mode === self::MODE_KASSA || $this->mode === self::MODE_BILLING)) { ?>
+            <?php if ($this->ym_smartpay && ($this->mode === self::MODE_KASSA)) { ?>
                 <table border="0" cellspacing="1" align="center"  width = "80%">
                     <tr>
                         <td align="center">
