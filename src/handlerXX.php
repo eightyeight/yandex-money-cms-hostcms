@@ -188,15 +188,15 @@ class Shop_Payment_System_HandlerXX extends Shop_Payment_System_Handler
      */
     public function getSumWithCoeff()
     {
-        return Shop_Controller::instance()->round(
-                ($this->ym_currency_id > 0
-                && $this->_shopOrder->shop_currency_id > 0
-                ? Shop_Controller::instance()->getCurrencyCoefficientInShopCurrency(
-                    $this->_shopOrder->Shop_Currency,
-                    Core_Entity::factory('Shop_Currency', $this->ym_currency_id)
-                )
-                : 0) * $this->_shopOrder->getAmount()
-        );
+        if ($this->ym_currency_id > 0 && $this->_shopOrder->shop_currency_id > 0) {
+            $sum = Shop_Controller::instance()->getCurrencyCoefficientInShopCurrency(
+                $this->_shopOrder->Shop_Currency,
+                Core_Entity::factory('Shop_Currency', $this->ym_currency_id)
+            );
+        } else {
+            $sum = 0;
+        }
+        return Shop_Controller::instance()->round($sum * $this->_shopOrder->getAmount());
     }
 
     /**
@@ -323,8 +323,9 @@ class Shop_Payment_System_HandlerXX extends Shop_Payment_System_Handler
                 }
                 $fio = implode(' ', $tmp);
                 ?>
-                <input type="hidden" name="formId" value="<?php echo $this->billingId; ?>" />
+                <input type="hidden" name="formId" value="<?php echo htmlspecialchars($this->billingId); ?>" />
                 <input type="hidden" name="narrative" value="<?php echo htmlspecialchars($narrative); ?>" />
+                <input type="hidden" name="quickPayVersion" value="2" />
             <?php } ?>
             <style>
                 .ym_table tr td{
@@ -390,7 +391,7 @@ class Shop_Payment_System_HandlerXX extends Shop_Payment_System_Handler
                     </tr>
                 <?php } ?>
             </table>
-            <?php if ($this->ym_smartpay && ($this->mode === self::MODE_KASSA)) { ?>
+            <?php if ($this->ym_smartpay && $this->mode === self::MODE_KASSA) { ?>
                 <table border="0" cellspacing="1" align="center"  width = "80%">
                     <tr>
                         <td align="center">
