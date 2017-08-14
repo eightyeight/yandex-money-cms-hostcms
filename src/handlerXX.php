@@ -88,8 +88,8 @@ class Shop_Payment_System_HandlerXX extends Shop_Payment_System_Handler
     );
 
     /**
-     * Только для Яндекс.Платёжки! Идентификатор Платежки
-     * @var string Идентификатор Платежки
+     * Только для Яндекс.Платёжки! ID формы
+     * @var string ID формы
      */
     protected $billingId = '';
 
