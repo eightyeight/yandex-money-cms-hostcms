@@ -251,8 +251,10 @@ class Shop_Payment_System_HandlerXX extends Shop_Payment_System_Handler
                 $receipt['customerContact'] = $phone;
             }
 
-            // некуда отправлять чек, если не указан ни имейл ни телефон, проверяем наличие
-            if (!empty($receipt['customerContact'])) {
+            // некуда отправлять чек, если не указан ни имейл ни телефон
+            if (empty($receipt['customerContact'])) {
+                $this->sendCheck = false;
+            } else {
                 $disc = 0;
                 $osum = 0;
                 foreach ($aShopOrderItems as $kk => $item) {
