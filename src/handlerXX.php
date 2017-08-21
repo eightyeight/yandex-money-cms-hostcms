@@ -456,13 +456,12 @@ class Shop_Payment_System_HandlerXX extends Shop_Payment_System_Handler
     {
         parent::_processOrder();
 
-        // Установка XSL-шаблонов в соответствии с настройками в узле структуры
-        $this->setXSLs();
-
-        // Отправка писем клиенту и пользователю
         if (method_exists($this, 'setMailSubjects')) {
             $this->setMailSubjects();
         }
+        // Установка XSL-шаблонов в соответствии с настройками в узле структуры
+        $this->setXSLs();
+        // Отправка писем администраторам и пользователю
         $this->send();
 
         return $this;
@@ -561,6 +560,9 @@ class Shop_Payment_System_HandlerXX extends Shop_Payment_System_Handler
                             $oShop_Order->system_information = "Заказ оплачен через сервис Яндекс.Касса.\n";
                             $oShop_Order->paid();
 
+                            if (method_exists($this, 'setMailSubjects')) {
+                                $this->setMailSubjects();
+                            }
                             $this->setXSLs();
                             $this->sendEmail($this->sendChangeStatusEmail);
 
