@@ -32,7 +32,7 @@ class Shop_Payment_System_HandlerXX extends Shop_Payment_System_Handler
     /**
      * @var int Используемый тпа платежа, одна из констант self::MODE_...
      */
-    protected $mode = self::MODE_BILLING;
+    protected $mode = self::MODE_KASSA;
 
     /**
      * @var bool Тестовый или полный режим функциональности
@@ -49,13 +49,13 @@ class Shop_Payment_System_HandlerXX extends Shop_Payment_System_Handler
      * Только для физического лица! Идентификатор магазина в сервисе Яндекс.Деньги. Выдается менеджером сервиса.
      * @var string Идентификатор магазина в сервисе Яндекс.Деньги
      */
-    protected $ym_account = '410011680044609';
+    protected $ym_account = '';
 
     /**
      * Пароль магазина в сервисе Яндекс.Деньги. Выдается менеджером сервиса.
      * @var string Пароль магазина в сервисе Яндекс.Деньги
      */
-    protected $ym_password = 'mEG2ninQcEOc8xTbHy5ApQOf';
+    protected $ym_password = '';
 
     /**
      * Отправлять в Яндекс.Кассу данные для чеков (54-ФЗ)
@@ -86,6 +86,14 @@ class Shop_Payment_System_HandlerXX extends Shop_Payment_System_Handler
         20 => 3,
         21 => 1,
     );
+
+    /**
+     * Отправлять ли письмо об изменении статуса заказа администратору при создании заказа до подтверждения оплаты
+     * кассой
+     * @var bool True чтобы письма отправлялись, false для того, чтобы приходило только одно писмо уже после
+     * подтверждения оплаты Яндекс.Кассой
+     */
+    protected $sendChangeStatusEmail = true;
 
     /**
      * Только для Яндекс.Платёжки! ID формы
@@ -123,16 +131,16 @@ class Shop_Payment_System_HandlerXX extends Shop_Payment_System_Handler
     /**
      * @var int Только для юридического лица! Идентификатор вашего магазина в Яндекс.Деньгах (ShopID)
      */
-    protected $ym_shopid = 101;
+    protected $ym_shopid = 123;
 
     /**
      * @var int Только для юридического лица! Идентификатор витрины вашего магазина в Яндекс.Деньгах (scid)
      */
-    protected $ym_scid = 51642;
+    protected $ym_scid = 12345;
 
     /**
      * Id валюты, в которой будет производиться рассчет суммы:
-     *     1 - рубли (RUR)
+     *     1 - рубли (RUB)
      *     2 - евро (EUR)
      *     3 - доллары (USD)
      * @var int id валюты
@@ -146,7 +154,7 @@ class Shop_Payment_System_HandlerXX extends Shop_Payment_System_Handler
      *     10643 — тестовая валюта (демо-рублики сервиса Яндекс.Деньги)
      * @var int Код валюты
      */
-    protected $ym_orderSumCurrencyPaycash = 643;
+    protected $ym_orderSumCurrencyPaycash = 10643;
 
     /**
      * Метод, вызываемый в коде настроек ТДС через Shop_Payment_System_Handler::checkBeforeContent($oShop);
@@ -452,6 +460,9 @@ class Shop_Payment_System_HandlerXX extends Shop_Payment_System_Handler
         $this->setXSLs();
 
         // Отправка писем клиенту и пользователю
+        if (method_exists($this, 'setMailSubjects')) {
+            $this->setMailSubjects();
+        }
         $this->send();
 
         return $this;
@@ -551,6 +562,7 @@ class Shop_Payment_System_HandlerXX extends Shop_Payment_System_Handler
                             $oShop_Order->paid();
 
                             $this->setXSLs();
+                            $this->sendEmail($this->sendChangeStatusEmail);
 
                             ob_start();
                             $this->changedOrder('changeStatusPaid');
@@ -567,5 +579,30 @@ class Shop_Payment_System_HandlerXX extends Shop_Payment_System_Handler
         } else {
             $this->sendCode($_POST, 1, 'md5 bad');
         }
+    }
+
+    /**
+     * @param bool $sendToAdmin
+     * @return Shop_Payment_System_Handler
+     * @throws Core_Exception
+     */
+    protected function sendEmail($sendToAdmin)
+    {
+        if ($sendToAdmin) {
+            return $this->send();
+        }
+
+        Core_Event::notify('Shop_Payment_System_Handler.onBeforeSend', $this);
+        if (is_null($this->_shopOrder)) {
+            throw new Core_Exception('send(): shopOrder is empty.');
+        }
+        $oShopOrder = $this->_shopOrder;
+        $oShop = $oShopOrder->Shop;
+        if ($oShop->send_order_email_user) {
+            $oCore_Mail_Siteuser = $this->getSiteuserEmail();
+            $this->sendSiteuserEmail($oCore_Mail_Siteuser);
+        }
+        Core_Event::notify('Shop_Payment_System_Handler.onAfterSend', $this);
+        return $this;
     }
 }
