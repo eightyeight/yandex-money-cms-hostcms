@@ -90,7 +90,7 @@ class Shop_Payment_System_HandlerXX extends Shop_Payment_System_Handler
     /**
      * Отправлять ли письмо об изменении статуса заказа администратору при создании заказа до подтверждения
      * оплаты кассой.
-     * @var bool True чтобы письма отправлялись, false для того, чтобы приходило только одно писмо уже после
+     * @var bool True чтобы письма отправлялись, false для того, чтобы приходило только одно письмо уже после
      * подтверждения оплаты Яндекс.Кассой
      * @link https://github.com/yandex-money/yandex-money-cms-hostcms/issues/5
      */
@@ -251,8 +251,10 @@ class Shop_Payment_System_HandlerXX extends Shop_Payment_System_Handler
                 $receipt['customerContact'] = $phone;
             }
 
-            // некуда отправлять чек, если не указан ни имейл ни телефон, проверяем наличие
-            if (!empty($receipt['customerContact'])) {
+            // некуда отправлять чек, если не указан ни имейл ни телефон
+            if (empty($receipt['customerContact'])) {
+                $this->sendCheck = false;
+            } else {
                 $disc = 0;
                 $osum = 0;
                 foreach ($aShopOrderItems as $kk => $item) {
@@ -456,13 +458,12 @@ class Shop_Payment_System_HandlerXX extends Shop_Payment_System_Handler
     {
         parent::_processOrder();
 
-        // Установка XSL-шаблонов в соответствии с настройками в узле структуры
-        $this->setXSLs();
-
-        // Отправка писем клиенту и пользователю
         if (method_exists($this, 'setMailSubjects')) {
             $this->setMailSubjects();
         }
+        // Установка XSL-шаблонов в соответствии с настройками в узле структуры
+        $this->setXSLs();
+        // Отправка писем администраторам и пользователю
         $this->send();
 
         return $this;
@@ -561,6 +562,9 @@ class Shop_Payment_System_HandlerXX extends Shop_Payment_System_Handler
                             $oShop_Order->system_information = "Заказ оплачен через сервис Яндекс.Касса.\n";
                             $oShop_Order->paid();
 
+                            if (method_exists($this, 'setMailSubjects')) {
+                                $this->setMailSubjects();
+                            }
                             $this->setXSLs();
                             $this->sendEmail($this->sendChangeStatusEmail);
 
