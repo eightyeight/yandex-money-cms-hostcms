@@ -251,41 +251,36 @@ class Shop_Payment_System_HandlerXX extends Shop_Payment_System_Handler
                 $receipt['customerContact'] = $phone;
             }
 
-            // некуда отправлять чек, если не указан ни имейл ни телефон
-            if (empty($receipt['customerContact'])) {
-                $this->sendCheck = false;
-            } else {
-                $disc = 0;
-                $osum = 0;
-                foreach ($aShopOrderItems as $kk => $item) {
-                    if ($item->price < 0) {
-                        $disc -= $item->getAmount();
-                        unset($aShopOrderItems[$kk]);
-                    } else {
-                        if ($item->shop_item_id) {
-                            $osum += $item->getAmount();
-                        }
-                    }
-                }
-
-                unset($item);
-                $disc = abs($disc) / $osum;
-                foreach ($aShopOrderItems as $item) {
-                    $tax_id = false;
+            $disc = 0;
+            $osum = 0;
+            foreach ($aShopOrderItems as $kk => $item) {
+                if ($item->price < 0) {
+                    $disc -= $item->getAmount();
+                    unset($aShopOrderItems[$kk]);
+                } else {
                     if ($item->shop_item_id) {
-                        $tax_id = $item->Shop_Item->shop_tax_id;
+                        $osum += $item->getAmount();
                     }
-
-                    $receipt['items'][] = array(
-                        'quantity' => $item->quantity,
-                        'text' => mb_substr($item->name, 0, 128, 'utf-8'),
-                        'tax' => Core_Array::get($this->kassaTaxRates, $tax_id, $this->kassaTaxRateDefault),
-                        'price' => array(
-                            'amount' => number_format($item->getAmount() * ($item->shop_item_id ? 1 - $disc : 1), 2, '.', ''),
-                            'currency' => 'RUB'
-                        ),
-                    );
                 }
+            }
+
+            unset($item);
+            $disc = abs($disc) / $osum;
+            foreach ($aShopOrderItems as $item) {
+                $tax_id = false;
+                if ($item->shop_item_id) {
+                    $tax_id = $item->Shop_Item->shop_tax_id;
+                }
+
+                $receipt['items'][] = array(
+                    'quantity' => $item->quantity,
+                    'text' => mb_substr($item->name, 0, 128, 'utf-8'),
+                    'tax' => Core_Array::get($this->kassaTaxRates, $tax_id, $this->kassaTaxRateDefault),
+                    'price' => array(
+                        'amount' => number_format($item->getAmount() * ($item->shop_item_id ? 1 - $disc : 1), 2, '.', ''),
+                        'currency' => 'RUB'
+                    ),
+                );
             }
         }
 
