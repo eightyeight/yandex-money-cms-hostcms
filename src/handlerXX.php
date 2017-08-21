@@ -88,10 +88,11 @@ class Shop_Payment_System_HandlerXX extends Shop_Payment_System_Handler
     );
 
     /**
-     * Отправлять ли письмо об изменении статуса заказа администратору при создании заказа до подтверждения оплаты
-     * кассой
+     * Отправлять ли письмо об изменении статуса заказа администратору при создании заказа до подтверждения
+     * оплаты кассой.
      * @var bool True чтобы письма отправлялись, false для того, чтобы приходило только одно писмо уже после
      * подтверждения оплаты Яндекс.Кассой
+     * @link https://github.com/yandex-money/yandex-money-cms-hostcms/issues/5
      */
     protected $sendChangeStatusEmail = true;
 
