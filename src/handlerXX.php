@@ -2,7 +2,7 @@
 
 /**
  * Яндекс.Деньги
- * Версия 1.4.1
+ * Версия 1.4.2
  * Лицензионный договор:
  * Любое использование Вами программы означает полное и безоговорочное принятие Вами условий лицензионного договора, размещенного по адресу https://money.yandex.ru/doc.xml?id=527132 (далее – «Лицензионный договор»). Если Вы не принимаете условия Лицензионного договора в полном объёме, Вы не имеете права использовать программу в каких-либо целях.
  */
@@ -32,7 +32,7 @@ class Shop_Payment_System_HandlerXX extends Shop_Payment_System_Handler
     /**
      * @var int Используемый тпа платежа, одна из констант self::MODE_...
      */
-    protected $mode = self::MODE_BILLING;
+    protected $mode = self::MODE_KASSA;
 
     /**
      * @var bool Тестовый или полный режим функциональности
@@ -49,13 +49,13 @@ class Shop_Payment_System_HandlerXX extends Shop_Payment_System_Handler
      * Только для физического лица! Идентификатор магазина в сервисе Яндекс.Деньги. Выдается менеджером сервиса.
      * @var string Идентификатор магазина в сервисе Яндекс.Деньги
      */
-    protected $ym_account = '410011680044609';
+    protected $ym_account = '';
 
     /**
      * Пароль магазина в сервисе Яндекс.Деньги. Выдается менеджером сервиса.
      * @var string Пароль магазина в сервисе Яндекс.Деньги
      */
-    protected $ym_password = 'mEG2ninQcEOc8xTbHy5ApQOf';
+    protected $ym_password = '';
 
     /**
      * Отправлять в Яндекс.Кассу данные для чеков (54-ФЗ)
@@ -86,6 +86,15 @@ class Shop_Payment_System_HandlerXX extends Shop_Payment_System_Handler
         20 => 3,
         21 => 1,
     );
+
+    /**
+     * Отправлять ли письмо об изменении статуса заказа администратору при создании заказа до подтверждения
+     * оплаты кассой.
+     * @var bool True чтобы письма отправлялись, false для того, чтобы приходило только одно письмо уже после
+     * подтверждения оплаты Яндекс.Кассой
+     * @link https://github.com/yandex-money/yandex-money-cms-hostcms/issues/5
+     */
+    protected $sendChangeStatusEmail = true;
 
     /**
      * Только для Яндекс.Платёжки! ID формы
@@ -123,16 +132,16 @@ class Shop_Payment_System_HandlerXX extends Shop_Payment_System_Handler
     /**
      * @var int Только для юридического лица! Идентификатор вашего магазина в Яндекс.Деньгах (ShopID)
      */
-    protected $ym_shopid = 101;
+    protected $ym_shopid = 123;
 
     /**
      * @var int Только для юридического лица! Идентификатор витрины вашего магазина в Яндекс.Деньгах (scid)
      */
-    protected $ym_scid = 51642;
+    protected $ym_scid = 12345;
 
     /**
      * Id валюты, в которой будет производиться рассчет суммы:
-     *     1 - рубли (RUR)
+     *     1 - рубли (RUB)
      *     2 - евро (EUR)
      *     3 - доллары (USD)
      * @var int id валюты
@@ -146,7 +155,7 @@ class Shop_Payment_System_HandlerXX extends Shop_Payment_System_Handler
      *     10643 — тестовая валюта (демо-рублики сервиса Яндекс.Деньги)
      * @var int Код валюты
      */
-    protected $ym_orderSumCurrencyPaycash = 643;
+    protected $ym_orderSumCurrencyPaycash = 10643;
 
     /**
      * Метод, вызываемый в коде настроек ТДС через Shop_Payment_System_Handler::checkBeforeContent($oShop);
@@ -231,12 +240,12 @@ class Shop_Payment_System_HandlerXX extends Shop_Payment_System_Handler
             $aShopOrderItems = $oShop_Order->Shop_Order_Items->findAll();
 
             $receipt = array(
-                'customerContact' => 'noData',
+                'customerContact' => '',
                 'items' => array(),
             );
             $email = isset($this->_shopOrder->email) ? $this->_shopOrder->email : '';
             $phone = isset($this->_shopOrder->phone) ? $this->_shopOrder->phone : '';
-            if (!empty($value)) {
+            if (!empty($email)) {
                 $receipt['customerContact'] = $email;
             } elseif (!empty($phone)) {
                 $receipt['customerContact'] = $phone;
@@ -263,14 +272,10 @@ class Shop_Payment_System_HandlerXX extends Shop_Payment_System_Handler
                     $tax_id = $item->Shop_Item->shop_tax_id;
                 }
 
-                /*if (strpos('Доставка', $item->name) !== false) {
-
-                }*/
-
                 $receipt['items'][] = array(
                     'quantity' => $item->quantity,
-                    'text' => substr($item->name, 0, 128),
-                    'tax' => ($tax_id && isset($this->kassaTaxRates[$tax_id]) ? $this->kassaTaxRates[$tax_id] : $this->kassaTaxRateDefault),
+                    'text' => mb_substr($item->name, 0, 128, 'utf-8'),
+                    'tax' => Core_Array::get($this->kassaTaxRates, $tax_id, $this->kassaTaxRateDefault),
                     'price' => array(
                         'amount' => number_format($item->getAmount() * ($item->shop_item_id ? 1 - $disc : 1), 2, '.', ''),
                         'currency' => 'RUB'
@@ -448,10 +453,12 @@ class Shop_Payment_System_HandlerXX extends Shop_Payment_System_Handler
     {
         parent::_processOrder();
 
+        if (method_exists($this, 'setMailSubjects')) {
+            $this->setMailSubjects();
+        }
         // Установка XSL-шаблонов в соответствии с настройками в узле структуры
         $this->setXSLs();
-
-        // Отправка писем клиенту и пользователю
+        // Отправка писем администраторам и пользователю
         $this->send();
 
         return $this;
@@ -550,7 +557,11 @@ class Shop_Payment_System_HandlerXX extends Shop_Payment_System_Handler
                             $oShop_Order->system_information = "Заказ оплачен через сервис Яндекс.Касса.\n";
                             $oShop_Order->paid();
 
+                            if (method_exists($this, 'setMailSubjects')) {
+                                $this->setMailSubjects();
+                            }
                             $this->setXSLs();
+                            $this->sendEmail($this->sendChangeStatusEmail);
 
                             ob_start();
                             $this->changedOrder('changeStatusPaid');
@@ -567,5 +578,30 @@ class Shop_Payment_System_HandlerXX extends Shop_Payment_System_Handler
         } else {
             $this->sendCode($_POST, 1, 'md5 bad');
         }
+    }
+
+    /**
+     * @param bool $sendToAdmin
+     * @return Shop_Payment_System_Handler
+     * @throws Core_Exception
+     */
+    protected function sendEmail($sendToAdmin)
+    {
+        if ($sendToAdmin) {
+            return $this->send();
+        }
+
+        Core_Event::notify('Shop_Payment_System_Handler.onBeforeSend', $this);
+        if (is_null($this->_shopOrder)) {
+            throw new Core_Exception('send(): shopOrder is empty.');
+        }
+        $oShopOrder = $this->_shopOrder;
+        $oShop = $oShopOrder->Shop;
+        if ($oShop->send_order_email_user) {
+            $oCore_Mail_Siteuser = $this->getSiteuserEmail();
+            $this->sendSiteuserEmail($oCore_Mail_Siteuser);
+        }
+        Core_Event::notify('Shop_Payment_System_Handler.onAfterSend', $this);
+        return $this;
     }
 }
