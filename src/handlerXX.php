@@ -2,7 +2,7 @@
 
 /**
  * Яндекс.Деньги
- * Версия 1.4.2
+ * Версия 1.4.3
  * Лицензионный договор:
  * Любое использование Вами программы означает полное и безоговорочное принятие Вами условий лицензионного договора, размещенного по адресу https://money.yandex.ru/doc.xml?id=527132 (далее – «Лицензионный договор»). Если Вы не принимаете условия Лицензионного договора в полном объёме, Вы не имеете права использовать программу в каких-либо целях.
  */
@@ -80,8 +80,8 @@ class Shop_Payment_System_HandlerXX extends Shop_Payment_System_Handler
      * @var array Массив отношений налога магазина и отправляемой таксы
      */
     protected $kassaTaxRates = array(
-        2  => 4,
-        5  => 4,
+        2 => 4,
+        5 => 4,
         19 => 3,
         20 => 3,
         21 => 1,
@@ -239,16 +239,14 @@ class Shop_Payment_System_HandlerXX extends Shop_Payment_System_Handler
             $oShop_Order = Core_Entity::factory('Shop_Order', $this->_shopOrder->id);
             $aShopOrderItems = $oShop_Order->Shop_Order_Items->findAll();
 
-            $receipt = array(
-                'customerContact' => '',
-                'items' => array(),
-            );
+            $receipt = new YandexMoneyReceipt();
+
             $email = isset($this->_shopOrder->email) ? $this->_shopOrder->email : '';
             $phone = isset($this->_shopOrder->phone) ? $this->_shopOrder->phone : '';
             if (!empty($email)) {
-                $receipt['customerContact'] = $email;
+                $receipt->setCustomerContact($email);
             } elseif (!empty($phone)) {
-                $receipt['customerContact'] = $phone;
+                $receipt->setCustomerContact($phone);
             }
 
             $disc = 0;
@@ -271,32 +269,32 @@ class Shop_Payment_System_HandlerXX extends Shop_Payment_System_Handler
                 if ($item->shop_item_id) {
                     $tax_id = $item->Shop_Item->shop_tax_id;
                 }
-
-                $receipt['items'][] = array(
-                    'quantity' => $item->quantity,
-                    'text' => mb_substr($item->name, 0, 128, 'utf-8'),
-                    'tax' => Core_Array::get($this->kassaTaxRates, $tax_id, $this->kassaTaxRateDefault),
-                    'price' => array(
-                        'amount' => number_format($item->getAmount() * ($item->shop_item_id ? 1 - $disc : 1), 2, '.', ''),
-                        'currency' => 'RUB'
-                    ),
-                );
+                $tax = Core_Array::get($this->kassaTaxRates, $tax_id, $this->kassaTaxRateDefault);
+                $amount = $item->getAmount() * ($item->shop_item_id ? 1 - $disc : 1);
+                $receipt->addItem($item->name, $amount, $item->quantity, $tax);
             }
+
+            $receiptJson = $receipt->normalize($sum)->getJson();
         }
 
         ?>
-        <form method="POST" id="frmYandexMoney" action="<?php echo $this->getFormUrl()?>">
+        <form method="POST" id="frmYandexMoney" action="<?php echo $this->getFormUrl() ?>">
             <?php if ($this->mode === self::MODE_KASSA) { ?>
                 <input class="wide" name="scid" value="<?php echo $this->ym_scid; ?>" type="hidden">
                 <input type="hidden" name="ShopID" value="<?php echo $this->ym_shopid; ?>">
-                <input type="hidden" name="CustomerNumber" value="<?php echo (is_null($oSiteuser) ? 0 : $oSiteuser->id); ?>">
+                <input type="hidden" name="CustomerNumber"
+                       value="<?php echo(is_null($oSiteuser) ? 0 : $oSiteuser->id); ?>">
                 <input type="hidden" name="orderNumber" value="<?php echo $this->_shopOrder->id; ?>">
                 <input type="hidden" name="shopSuccessURL" value="<?php echo htmlspecialchars($successUrl); ?>">
                 <input type="hidden" name="shopFailURL" value="<?php echo htmlspecialchars($failUrl); ?>">
                 <input type="hidden" name="cms_name" value="hostcms">
-                <?php if (!empty($email)) { ?> <input type="hidden" name="cps_email" value="<?php echo htmlspecialchars($email); ?>"> <?php } ?>
-                <?php if (!empty($phone)) { ?> <input type="hidden" name="cps_phone" value="<?php echo htmlspecialchars($phone); ?>"> <?php } ?>
-                <?php if (isset ($this->sendCheck) && $this->sendCheck) { ?> <input type="hidden" name="ym_merchant_receipt" value='<?php echo json_encode($receipt); ?>'> <?php } ?>
+                <?php if (!empty($email)) { ?> <input type="hidden" name="cps_email"
+                                                      value="<?php echo htmlspecialchars($email); ?>"> <?php } ?>
+                <?php if (!empty($phone)) { ?> <input type="hidden" name="cps_phone"
+                                                      value="<?php echo htmlspecialchars($phone); ?>"> <?php } ?>
+                <?php if (isset ($this->sendCheck) && $this->sendCheck) { ?> <input type="hidden"
+                                                                                    name="ym_merchant_receipt"
+                                                                                    value='<?php echo $receiptJson; ?>'> <?php } ?>
             <?php } elseif ($this->mode === self::MODE_MONEY) { ?>
                 <input type="hidden" name="receiver" value="<?php echo htmlspecialchars($this->ym_account); ?>">
                 <input type="hidden" name="formcomment" value="<?php echo htmlspecialchars($sSiteAlias); ?>">
@@ -308,10 +306,11 @@ class Shop_Payment_System_HandlerXX extends Shop_Payment_System_Handler
                 <input type="hidden" name="successUrl" value="<?php echo htmlspecialchars($successUrl); ?>">
 
                 <input type="hidden" name="targets" value="Заказ <?php echo $this->_shopOrder->id; ?>">
-                <input type="hidden" name="sum" value="<?php echo $sum; ?>" data-type="number" >
-                <input type="hidden" name="comment" value="<?php echo htmlspecialchars($this->_shopOrder->description); ?>" >
+                <input type="hidden" name="sum" value="<?php echo $sum; ?>" data-type="number">
+                <input type="hidden" name="comment"
+                       value="<?php echo htmlspecialchars($this->_shopOrder->description); ?>">
                 <input type="hidden" name="need-fio" value="true">
-                <input type="hidden" name="need-email" value="true" >
+                <input type="hidden" name="need-email" value="true">
                 <input type="hidden" name="need-phone" value="false">
                 <input type="hidden" name="need-address" value="false">
             <?php } elseif ($this->mode === self::MODE_BILLING) {
@@ -328,22 +327,25 @@ class Shop_Payment_System_HandlerXX extends Shop_Payment_System_Handler
                 }
                 $fio = implode(' ', $tmp);
                 ?>
-                <input type="hidden" name="formId" value="<?php echo htmlspecialchars($this->billingId); ?>" />
-                <input type="hidden" name="narrative" value="<?php echo htmlspecialchars($narrative); ?>" />
-                <input type="hidden" name="quickPayVersion" value="2" />
+                <input type="hidden" name="formId" value="<?php echo htmlspecialchars($this->billingId); ?>"/>
+                <input type="hidden" name="narrative" value="<?php echo htmlspecialchars($narrative); ?>"/>
+                <input type="hidden" name="quickPayVersion" value="2"/>
             <?php } ?>
             <style>
-                .ym_table tr td{
+                .ym_table tr td {
                     padding: 10px;
                 }
-                .ym_table td{
+
+                .ym_table td {
                     padding: 10px;
                 }
             </style>
-            <table class="ym_table" border = "1" cellspacing = "20" width = "80%" bgcolor = "#FFFFFF" align = "center" bordercolor = "#000000">
+            <table class="ym_table" border="1" cellspacing="20" width="80%" bgcolor="#FFFFFF" align="center"
+                   bordercolor="#000000">
                 <tr>
                     <td>Сумма, руб.</td>
-                    <td> <input type="text" name="<?php echo $this->mode === self::MODE_KASSA ? 'Sum' : 'sum'; ?>" value="<?php echo $sum; ?>" readonly="readonly" /> </td>
+                    <td><input type="text" name="<?php echo $this->mode === self::MODE_KASSA ? 'Sum' : 'sum'; ?>"
+                               value="<?php echo $sum; ?>" readonly="readonly"/></td>
                 </tr>
                 <?php if (!$this->ym_smartpay || ($this->mode === self::MODE_MONEY)) { ?>
                     <tr>
@@ -390,25 +392,29 @@ class Shop_Payment_System_HandlerXX extends Shop_Payment_System_Handler
                     <tr>
                         <td>ФИО плательщика</td>
                         <td>
-                            <input type="text" name="fio" value="<?php echo htmlspecialchars($fio); ?>" id="ym-billing-fio" />
-                            <div id="ym-billing-fio-error" style="display:none;">Укажите фамилию, имя и отчество плательщика</div>
+                            <input type="text" name="fio" value="<?php echo htmlspecialchars($fio); ?>"
+                                   id="ym-billing-fio"/>
+                            <div id="ym-billing-fio-error" style="display:none;">Укажите фамилию, имя и отчество
+                                плательщика
+                            </div>
                         </td>
                     </tr>
                 <?php } ?>
             </table>
             <?php if ($this->ym_smartpay && $this->mode === self::MODE_KASSA) { ?>
-                <table border="0" cellspacing="1" align="center"  width = "80%">
+                <table border="0" cellspacing="1" align="center" width="80%">
                     <tr>
                         <td align="center">
-                            <a href="#" id="button-confirm"><img width="165" height="76" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAKUAAABMCAYAAAAMYHeQAAAABGdBTUEAALGPC/xhBQAAEI5JREFUeAHtXQd4VcUSnoSEEgg1dBJqQgcB6UWRIoiIoGBFVBARROApICICKhYECz4RCyqoDxEsPAUfIF0hQOglgBSpoYQAoaQAyZt/L3OyOblpcCP35u5837m7Ozu7Z8+cP9vOzMaHMqDk5J55aW/iq0TJvfkql4GoyTIayLoGfHyiKNlnJlXL+4qPz5xEe0E/O4PTPhZPATJppJU2EaMBV2ggObksd3IjucNDbaP4Star9dUTHE8BpJJM6mPLN0mjAZdpIJksfKXCnQ7KVBl8Zx9mlHFZC0xFRgM2DdjwZeFPQGkxrpWzp23VmaTRQI5oQOFOQKnfQQApoZ5n4kYDrtZAGpzZQSkCCCXu6kaY+owG7BpIhTWAMhXjWtqA0q42k84pDaTBn74lJECU0N6L5lSjTL3erQEdlGprKD3gCTC9W13m6W+KBuygFDBKeFMaZW7qVRpIgzUBpZ4hccnzKg2Zh/3HNQC8gQR35Ax4kinCjiLm12ggZzSQBmd2UIqAADNnmmFqNRpIrQHBneLqoJQMAaSel7oKkzIacJ0GdNypWvUtITB0AYm77vY5UFNSUjIdOhZHCYlJVCU4gPz9zd9SDqg5p6sE1ixLITsocXMBo4Q53aDrrn/KjP00/sM9FHPusqojf15fevHpajTm2TDy9XX75l/3c+eygmlelDNQ4pnTCLqbIr6ce4iGvL6DOrQMor49Qyggfx76Zt4RGscgvcq956tDa7hbk017sqgBgA8XxjyEebTLP/mvrqc57ZYU1n4pFcjvS2t/aE3586HZ3P8nJ1PtzsvpDPecUWs6umW7TaNSa8An9JeCzLl67cIQnpReT5m6pJulLsVdoQa1ClO7FiUtQKKJPmwBWjTQnxIvJ1ktxpzzvS/30+z5x2j3gQuqR60dGkgT/lWDmt5STMn9uvQEjf1gt1VGj/S6qxyN5CkBaPTkSPrfylN6thWf8kodatmouErv3n+BRk2KpM2R5+hEdCJVqlCA7m1fRk0rDkfF0YNDNlrl9Ii/vw+Fz21Nvyw5TuOm7KEF05tS6aB8SuTipSt091PrqHAhP5r3SRN64c0dtCzceZ8x6NFKVLSwP02Y+hctntGMihfNq9/G7ePpgdKth++AAn40e8qtlnKvXEmi6DOJ9Mmsg7Rm8xl64/mUoXvwq9vps9kHadSAUBozKJQ27TxHn39/iDr3XUuHVranQgX9eE6aSBuZP3ZwGBUv4m/V+/J7u+gQg0jowJFLdOR4HI0eGCosOhwVT5Om76Nz5x3z2kPHLtEtXVfQrXWL0ssDw7g3z0M/LoqiN6btpYIBftT/gRDq06OCKr9h+zma+fMRlgulksXzWvNgPAvao/9xAaTL152mygxwUNtmQRRSzhEH+BDvfa+j3rrVA2njjnOqjitXrfWDKucJP+mB0hPabrWxRa8/af22syrd5fZSCoBIXOYec9vuWHq+b1UaP6S6yu/argwFFctLg8Zvp517z1OT+o7eEplP3BdMFcsHKDn8vPHxX1ZcIsUYtM/1qSJJ2sQvH6AUWgHg8C7Ad+83pPJlHKB5oEs5KtdiEf0REUMvPRNqlf/u16MKlI/3CKaqFTGKOaetu2Lp/a/2U9WQAELPD+rStrQlPPXbv6lG1UJWvcgAKD2VcgUoseJevTGGh9aTNH/5Ser1XASDopHaHlo5q6V6N3iZf3NPt4uH1gjuoUAX4zCVcS31vjeYe6xgVWks956YMmyOjFVtucjTjuwS5skDxmwlTCP8/XxoFQM7OzTnt2NUpJA/FQ70U1tmdcIKZ6f4TZHNFaDscWdZwjVpVG16eNgGmvXrMRrcO4ZaNy7BPcZZnt/tolXrT1NcQhKVKOpP1SsXUsrm9+1yAvhf/2gPTZ9zWA39eXgJWa9GYbpyJZkXYtm/HaYakfvO008fN6aRE3dmu4K3P9lLefL4UOyFK2rrrGn9ojRvWhNrrprtCv+BAlh1exyhxwP45nIvYKdnHq6kWIv/PEXRMQnUoU84HT8VTzPfaaDmkNHrO9GI/tWUDHohV9O4KbvV3umj3cpT+JxWdGHrXbRx3m1UpmS+bIPy5OkEBmIkvTW85nWDKOLnNnRgeXs6HdGJNs1ro4b14W9lH9yu1lNG9XlkT4kXvHDVKVq39Sx141Wt/hXn12Un1PNWDSlIqzedUb3DjIkN6O47UuZg4bwYAl3N5iIgiRf1ftzrZES4f4NaRWjC8zUtsbOxPIzztOGWmkUsXlYiAE+NKoWo/4MVsyKeqUz9moWpEs+Z9x68mKnszRTwSFBiX3LiiFrUb/QW6vB4OA3vV1XpEKvcWb8cpbphgdSzc1mK5+G6QD5f+vKHQzyEBvKczJe+X3CMJn3uWJhcuJS1OeVpXg1jIYUtnhKZbK90bFWSJk/fTwuWn6Dbm5agrbvO09AJ21VbLvC2TnYI88cN3NNhq+t6ad2Ws4TFGXYHMN/+iwH5WHfHKv1668zpch4JSiilb68Q5Zg++t1ddHf/dUpPmL893LUCvT2iJmHbKIAXv++Nrs0r1wNU8bYl6utAmyYlKOKn1tT6oT/pzw0xai6amZLXcI/b9el1VKFMfpo8KmU7yFm55x6rQnsOXKSegzfQpfirvMjwU1tIXbmnxidRALwEr/6zQsOeqKLmo1mRTU8G7Qbl40+wIWUL0GtDq6tPsenJuwMff4K4MLdEKF90AFY/d/6iw+1ThHnhkePxFMcAqFwhfYOMg0cvqV4O+5LXQ/EJV1Nt1GdWBzb4ZeP8Rnq6zO7j6fm55ouO/iLwwoO5B8iM9P3HzGSd5cunTGd5znjoqSsHX98fgLP6vInnkatvb3pB3visBpTe+Nbd/JkNKN38BXlj8wwovfGtu/kzG1C6+QvyxuYZUHrjW3fzZzagdPMX5I3NM6D0xrfu5s9sQOnmL8gbm2c+OdzgW4f95Gv/3qM8KWE0DNtF0KmYRPpobF31jf4Gb+F1xQ0ob/CVL/rjlHJMC5/bil0SAq3a2j6y2oqbSPY04JHDNwxpp7NFthA8Eb+Y40ivWBtN9e9eTkUb/EY9Bq5Xhr6Qe+ezvTSeyzXqtpJCWi+mMewUJnSKjWkhizIou5L9bIReYq/EYJbv0m8tbd8TK2wrhK1kNfav0QFpZV6LtH9sjbKnFP7tDNh912waZ88/SjU6LrWuBvesEDFK71kmfrqXPpx5QMlNmLqHer/g8I5Eu1v2+kP5Aw0cu5XN5bJmmmfd0E0iHgnK46cSeHhMsFQIy3J4JAJcMNUa3q8aRS5sS0XYL+VN9iIEYTiFg9cE9nRc8nVz+nnxcfqGPQlBT47arGR3LWpLQx+vQk+8uFnxl66Jpl/Y/XYj2zTCjQDDtJ1gkrbv0EV6dtw2rjOKfmeLd1xnGKxC+w9fTAUQGNmKp+LfR+KoR8eytPDLZvTtuw2V2RvKZfQssEiHxyMsn+A6/PqwGsq6/r5nI6gfm/Rtm387e1nG0bT/HJQmeFTokaCEO+rx6BRQisZh5Auf7nvalaaCBfKwHWMYLVhxUrLpNral7NSmFIVWKkQPdS2vXF9jziayQe5JGvFUNeUTfh/7+pQrlZ+Nc2PpjuZB7IfdStk/Yq4YwHXaCW6z+5a2U+zuAxkUL22hYRN2ZNm6+0xsItWsVkh5UerWTpk9C24If/Yh7FkJC6iV62OoDPuIP3F/iGrvx+PrKSNje3s9Ie2Rc0q4QHTos0bZR+JgK/jjhFYqqOwqt+0+T9U7Lkul+6Psqw1q3iDFnbZRnSLKCh22mDDsvqP3mlRl4B0Jhy+Artn9q2gtW3B/zX4+zgiLHbhBTGTj4uEMbpB9TtnkvlXke82CPJ7bLIQeD38EdkK7MnqWD9jltjwbHcN/BwR3iybcmwtVYHM+XJ5IHglKOPrP/7ypGoLxQtHzgZrUK0otGhajRV81t97FsRPxVLaU45QJ3Tdl+57z7K9SQPnAFOFTNbbNv42CijvkMHSCBwPiRAYQTq2AlXq3AevoEXYIsxvt9h21RflkCyCtm2uRdXy8TP1rPjoVWi1WOah/+drT9NYLDmBp4pk+yxCeZqCXf/GdSHr/5Tp8CoY/+y1dsKrA8B3BLhzdeWrgaeSRwzeU3KJhcZo4shYNZZcBgAvUvmVJ1aPhgAAQ5oydngxnB36VpN9XRxNACn+VHxdGUQf2p8nLbgLtWgTRR9/8rRz9MT+txecRwT/8LXZPHfDKVlUYJ2fk5WMGpS5HjUQ48uU39jefysNldmn1xjPsYlHA+mPQy2f2LJB9k8EMn6PNfJpG26ZBylMxkg9YAGFht4WnIJ5IHtlTpqdoHJGCI1vgf1O+dH51ZMq01+pZe4fBDACsbnFM4J2tS9LARyqpqkY9HUoPDNlAX8w9zLJEL/CJGhi6KzLY7+GFU807l9FlPhpm3HPVrbpQMIFXt8PYKQzzuursdZhd6tw3XPmDl2m2UBXlWYBy6xg8fht9yHucGT0LCsC1A0fIDH97J58Z1Jzla1LjHquoLHt7Ykfgm8mOU0Gy266bLY+dXlzoMRFiJo8LYPUIHx1uZxqC6yy2anQHrRH84uA8NWZQmDpgNZAduuyEYTuIF1H24RknXUDezreXz2666h1LrEWSlMU04dPvDtKMa/NXZ88iss5CnKuETXxMPzyBcqWPjjPFY6WsA1KXwXCNyxmVLOGYU9rzCufQC76VF1t2wqlqYZVTzhXK6FnsZZH2YzfiIoHOn8+ZvDvycmVP6UzR67eeUUNvw9opK1Rncob3z2rAa3pKZ2ptXC9lO8hZvuG5jwY8u593Hz2alrhQAwaULlSmqco1GjCgdI0eTS0u1IABpQuVaapyjQbSAyVv4xoyGrg5GkgPlDenNeauRgOsAQGl9IwI9bhRktFATmsgDeYElPYbCzDtfJM2GshxDTgDpQBSwhxvhLmBV2sgDc7soBQBhMn8j4Gc/3str9aheXhXaeBqEolbgOBOVa2DUjIUIDk36XBUwn9d1QBTj9GAXQPsa/UT83TcKRGYqYlRBkIQgKp4v0dEb+7YonRgYEG/4Dy+PgEq1/wYDdygBjACc4c3q/uwiAlRUfH4VxUp/iGc0AEpcYASl9hWluA4HJpxejyMEIWPUGRRVsDMUUXgGcrdGpBeDk+JOMAlIeLw8ZUL/xpD4okch4k8fJkhJ+VQNlmAyHEFUAGWgE0AqINR4iKjlzFAhCa9kwSMEgrYAEQdkHpcZKQMQtXz6SpUTGYgFEEADRWDdL6AUoCNNMgA06EHb/oV3Og9ngBOekekERe+YElCS19pfQIcWSKICoTAQ8+JEHxnPaQBJCvGSwm4AAk+JBQQCiAlRL6UUQXlRwelXUCAJ8CUSuxglJ5SB6Qel3uZMHdqQMeNYERCYAdxAaaEwhM5CZWGAEowdBAhLYRKAEKEIOQhDnkBp5SVkLMMeakGBDsIBSsS19PAkM7X1aUWOmDogJI4wqxc6ZUH35B3aAAAE5K4DrqM4ignZVRcH771SgHGVIKc1gEKWaRB9tDBNb/eqAHBjLMQPJ2vx1PpSgAFph7X08KX0FmezkPckHdqQICGp5e4hM54ep6VrwMNTHvaztPz9TjkDBkN2DWggy69uJSx8p0ByxlPCl5vnpQ3Ye7WgAUsJ4+Z5byMQIZ6M8t3cm/DMhrIkgbSBen/Accwu941TV8MAAAAAElFTkSuQmCC" /></a>
+                            <a href="#" id="button-confirm"><img width="165" height="76"
+                                                                 src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAKUAAABMCAYAAAAMYHeQAAAABGdBTUEAALGPC/xhBQAAEI5JREFUeAHtXQd4VcUSnoSEEgg1dBJqQgcB6UWRIoiIoGBFVBARROApICICKhYECz4RCyqoDxEsPAUfIF0hQOglgBSpoYQAoaQAyZt/L3OyOblpcCP35u5837m7Ozu7Z8+cP9vOzMaHMqDk5J55aW/iq0TJvfkql4GoyTIayLoGfHyiKNlnJlXL+4qPz5xEe0E/O4PTPhZPATJppJU2EaMBV2ggObksd3IjucNDbaP4Star9dUTHE8BpJJM6mPLN0mjAZdpIJksfKXCnQ7KVBl8Zx9mlHFZC0xFRgM2DdjwZeFPQGkxrpWzp23VmaTRQI5oQOFOQKnfQQApoZ5n4kYDrtZAGpzZQSkCCCXu6kaY+owG7BpIhTWAMhXjWtqA0q42k84pDaTBn74lJECU0N6L5lSjTL3erQEdlGprKD3gCTC9W13m6W+KBuygFDBKeFMaZW7qVRpIgzUBpZ4hccnzKg2Zh/3HNQC8gQR35Ax4kinCjiLm12ggZzSQBmd2UIqAADNnmmFqNRpIrQHBneLqoJQMAaSel7oKkzIacJ0GdNypWvUtITB0AYm77vY5UFNSUjIdOhZHCYlJVCU4gPz9zd9SDqg5p6sE1ixLITsocXMBo4Q53aDrrn/KjP00/sM9FHPusqojf15fevHpajTm2TDy9XX75l/3c+eygmlelDNQ4pnTCLqbIr6ce4iGvL6DOrQMor49Qyggfx76Zt4RGscgvcq956tDa7hbk017sqgBgA8XxjyEebTLP/mvrqc57ZYU1n4pFcjvS2t/aE3586HZ3P8nJ1PtzsvpDPecUWs6umW7TaNSa8An9JeCzLl67cIQnpReT5m6pJulLsVdoQa1ClO7FiUtQKKJPmwBWjTQnxIvJ1ktxpzzvS/30+z5x2j3gQuqR60dGkgT/lWDmt5STMn9uvQEjf1gt1VGj/S6qxyN5CkBaPTkSPrfylN6thWf8kodatmouErv3n+BRk2KpM2R5+hEdCJVqlCA7m1fRk0rDkfF0YNDNlrl9Ii/vw+Fz21Nvyw5TuOm7KEF05tS6aB8SuTipSt091PrqHAhP5r3SRN64c0dtCzceZ8x6NFKVLSwP02Y+hctntGMihfNq9/G7ePpgdKth++AAn40e8qtlnKvXEmi6DOJ9Mmsg7Rm8xl64/mUoXvwq9vps9kHadSAUBozKJQ27TxHn39/iDr3XUuHVranQgX9eE6aSBuZP3ZwGBUv4m/V+/J7u+gQg0jowJFLdOR4HI0eGCosOhwVT5Om76Nz5x3z2kPHLtEtXVfQrXWL0ssDw7g3z0M/LoqiN6btpYIBftT/gRDq06OCKr9h+zma+fMRlgulksXzWvNgPAvao/9xAaTL152mygxwUNtmQRRSzhEH+BDvfa+j3rrVA2njjnOqjitXrfWDKucJP+mB0hPabrWxRa8/af22syrd5fZSCoBIXOYec9vuWHq+b1UaP6S6yu/argwFFctLg8Zvp517z1OT+o7eEplP3BdMFcsHKDn8vPHxX1ZcIsUYtM/1qSJJ2sQvH6AUWgHg8C7Ad+83pPJlHKB5oEs5KtdiEf0REUMvPRNqlf/u16MKlI/3CKaqFTGKOaetu2Lp/a/2U9WQAELPD+rStrQlPPXbv6lG1UJWvcgAKD2VcgUoseJevTGGh9aTNH/5Ser1XASDopHaHlo5q6V6N3iZf3NPt4uH1gjuoUAX4zCVcS31vjeYe6xgVWks956YMmyOjFVtucjTjuwS5skDxmwlTCP8/XxoFQM7OzTnt2NUpJA/FQ70U1tmdcIKZ6f4TZHNFaDscWdZwjVpVG16eNgGmvXrMRrcO4ZaNy7BPcZZnt/tolXrT1NcQhKVKOpP1SsXUsrm9+1yAvhf/2gPTZ9zWA39eXgJWa9GYbpyJZkXYtm/HaYakfvO008fN6aRE3dmu4K3P9lLefL4UOyFK2rrrGn9ojRvWhNrrprtCv+BAlh1exyhxwP45nIvYKdnHq6kWIv/PEXRMQnUoU84HT8VTzPfaaDmkNHrO9GI/tWUDHohV9O4KbvV3umj3cpT+JxWdGHrXbRx3m1UpmS+bIPy5OkEBmIkvTW85nWDKOLnNnRgeXs6HdGJNs1ro4b14W9lH9yu1lNG9XlkT4kXvHDVKVq39Sx141Wt/hXn12Un1PNWDSlIqzedUb3DjIkN6O47UuZg4bwYAl3N5iIgiRf1ftzrZES4f4NaRWjC8zUtsbOxPIzztOGWmkUsXlYiAE+NKoWo/4MVsyKeqUz9moWpEs+Z9x68mKnszRTwSFBiX3LiiFrUb/QW6vB4OA3vV1XpEKvcWb8cpbphgdSzc1mK5+G6QD5f+vKHQzyEBvKczJe+X3CMJn3uWJhcuJS1OeVpXg1jIYUtnhKZbK90bFWSJk/fTwuWn6Dbm5agrbvO09AJ21VbLvC2TnYI88cN3NNhq+t6ad2Ws4TFGXYHMN/+iwH5WHfHKv1668zpch4JSiilb68Q5Zg++t1ddHf/dUpPmL893LUCvT2iJmHbKIAXv++Nrs0r1wNU8bYl6utAmyYlKOKn1tT6oT/pzw0xai6amZLXcI/b9el1VKFMfpo8KmU7yFm55x6rQnsOXKSegzfQpfirvMjwU1tIXbmnxidRALwEr/6zQsOeqKLmo1mRTU8G7Qbl40+wIWUL0GtDq6tPsenJuwMff4K4MLdEKF90AFY/d/6iw+1ThHnhkePxFMcAqFwhfYOMg0cvqV4O+5LXQ/EJV1Nt1GdWBzb4ZeP8Rnq6zO7j6fm55ouO/iLwwoO5B8iM9P3HzGSd5cunTGd5znjoqSsHX98fgLP6vInnkatvb3pB3visBpTe+Nbd/JkNKN38BXlj8wwovfGtu/kzG1C6+QvyxuYZUHrjW3fzZzagdPMX5I3NM6D0xrfu5s9sQOnmL8gbm2c+OdzgW4f95Gv/3qM8KWE0DNtF0KmYRPpobF31jf4Gb+F1xQ0ob/CVL/rjlHJMC5/bil0SAq3a2j6y2oqbSPY04JHDNwxpp7NFthA8Eb+Y40ivWBtN9e9eTkUb/EY9Bq5Xhr6Qe+ezvTSeyzXqtpJCWi+mMewUJnSKjWkhizIou5L9bIReYq/EYJbv0m8tbd8TK2wrhK1kNfav0QFpZV6LtH9sjbKnFP7tDNh912waZ88/SjU6LrWuBvesEDFK71kmfrqXPpx5QMlNmLqHer/g8I5Eu1v2+kP5Aw0cu5XN5bJmmmfd0E0iHgnK46cSeHhMsFQIy3J4JAJcMNUa3q8aRS5sS0XYL+VN9iIEYTiFg9cE9nRc8nVz+nnxcfqGPQlBT47arGR3LWpLQx+vQk+8uFnxl66Jpl/Y/XYj2zTCjQDDtJ1gkrbv0EV6dtw2rjOKfmeLd1xnGKxC+w9fTAUQGNmKp+LfR+KoR8eytPDLZvTtuw2V2RvKZfQssEiHxyMsn+A6/PqwGsq6/r5nI6gfm/Rtm387e1nG0bT/HJQmeFTokaCEO+rx6BRQisZh5Auf7nvalaaCBfKwHWMYLVhxUrLpNral7NSmFIVWKkQPdS2vXF9jziayQe5JGvFUNeUTfh/7+pQrlZ+Nc2PpjuZB7IfdStk/Yq4YwHXaCW6z+5a2U+zuAxkUL22hYRN2ZNm6+0xsItWsVkh5UerWTpk9C24If/Yh7FkJC6iV62OoDPuIP3F/iGrvx+PrKSNje3s9Ie2Rc0q4QHTos0bZR+JgK/jjhFYqqOwqt+0+T9U7Lkul+6Psqw1q3iDFnbZRnSLKCh22mDDsvqP3mlRl4B0Jhy+Artn9q2gtW3B/zX4+zgiLHbhBTGTj4uEMbpB9TtnkvlXke82CPJ7bLIQeD38EdkK7MnqWD9jltjwbHcN/BwR3iybcmwtVYHM+XJ5IHglKOPrP/7ypGoLxQtHzgZrUK0otGhajRV81t97FsRPxVLaU45QJ3Tdl+57z7K9SQPnAFOFTNbbNv42CijvkMHSCBwPiRAYQTq2AlXq3AevoEXYIsxvt9h21RflkCyCtm2uRdXy8TP1rPjoVWi1WOah/+drT9NYLDmBp4pk+yxCeZqCXf/GdSHr/5Tp8CoY/+y1dsKrA8B3BLhzdeWrgaeSRwzeU3KJhcZo4shYNZZcBgAvUvmVJ1aPhgAAQ5oydngxnB36VpN9XRxNACn+VHxdGUQf2p8nLbgLtWgTRR9/8rRz9MT+txecRwT/8LXZPHfDKVlUYJ2fk5WMGpS5HjUQ48uU39jefysNldmn1xjPsYlHA+mPQy2f2LJB9k8EMn6PNfJpG26ZBylMxkg9YAGFht4WnIJ5IHtlTpqdoHJGCI1vgf1O+dH51ZMq01+pZe4fBDACsbnFM4J2tS9LARyqpqkY9HUoPDNlAX8w9zLJEL/CJGhi6KzLY7+GFU807l9FlPhpm3HPVrbpQMIFXt8PYKQzzuursdZhd6tw3XPmDl2m2UBXlWYBy6xg8fht9yHucGT0LCsC1A0fIDH97J58Z1Jzla1LjHquoLHt7Ykfgm8mOU0Gy266bLY+dXlzoMRFiJo8LYPUIHx1uZxqC6yy2anQHrRH84uA8NWZQmDpgNZAduuyEYTuIF1H24RknXUDezreXz2666h1LrEWSlMU04dPvDtKMa/NXZ88iss5CnKuETXxMPzyBcqWPjjPFY6WsA1KXwXCNyxmVLOGYU9rzCufQC76VF1t2wqlqYZVTzhXK6FnsZZH2YzfiIoHOn8+ZvDvycmVP6UzR67eeUUNvw9opK1Rncob3z2rAa3pKZ2ptXC9lO8hZvuG5jwY8u593Hz2alrhQAwaULlSmqco1GjCgdI0eTS0u1IABpQuVaapyjQbSAyVv4xoyGrg5GkgPlDenNeauRgOsAQGl9IwI9bhRktFATmsgDeYElPYbCzDtfJM2GshxDTgDpQBSwhxvhLmBV2sgDc7soBQBhMn8j4Gc/3str9aheXhXaeBqEolbgOBOVa2DUjIUIDk36XBUwn9d1QBTj9GAXQPsa/UT83TcKRGYqYlRBkIQgKp4v0dEb+7YonRgYEG/4Dy+PgEq1/wYDdygBjACc4c3q/uwiAlRUfH4VxUp/iGc0AEpcYASl9hWluA4HJpxejyMEIWPUGRRVsDMUUXgGcrdGpBeDk+JOMAlIeLw8ZUL/xpD4okch4k8fJkhJ+VQNlmAyHEFUAGWgE0AqINR4iKjlzFAhCa9kwSMEgrYAEQdkHpcZKQMQtXz6SpUTGYgFEEADRWDdL6AUoCNNMgA06EHb/oV3Og9ngBOekekERe+YElCS19pfQIcWSKICoTAQ8+JEHxnPaQBJCvGSwm4AAk+JBQQCiAlRL6UUQXlRwelXUCAJ8CUSuxglJ5SB6Qel3uZMHdqQMeNYERCYAdxAaaEwhM5CZWGAEowdBAhLYRKAEKEIOQhDnkBp5SVkLMMeakGBDsIBSsS19PAkM7X1aUWOmDogJI4wqxc6ZUH35B3aAAAE5K4DrqM4ignZVRcH771SgHGVIKc1gEKWaRB9tDBNb/eqAHBjLMQPJ2vx1PpSgAFph7X08KX0FmezkPckHdqQICGp5e4hM54ep6VrwMNTHvaztPz9TjkDBkN2DWggy69uJSx8p0ByxlPCl5vnpQ3Ye7WgAUsJ4+Z5byMQIZ6M8t3cm/DMhrIkgbSBen/Accwu941TV8MAAAAAElFTkSuQmCC"/></a>
                         </td>
                     </tr>
                 </table>
             <?php } else { ?>
-                <table border="0" cellspacing="1" align="center"  width = "80%" bgcolor="#CCCCCC" >
+                <table border="0" cellspacing="1" align="center" width="80%" bgcolor="#CCCCCC">
                     <tr bgcolor="#FFFFFF">
                         <td width="490"></td>
-                        <td width="48"><input type="submit" name = "BuyButton" value = "Оплатить"></td>
+                        <td width="48"><input type="submit" name="BuyButton" value="Оплатить"></td>
                     </tr>
                 </table>
             <?php } ?>
@@ -512,7 +518,7 @@ class Shop_Payment_System_HandlerXX extends Shop_Payment_System_Handler
                 . $callbackParams['codepro'] . '&' . $this->ym_password . '&' . $callbackParams['label'];
 
             $check = (sha1($string) == $callbackParams['sha1_hash']);
-            if (!$check){
+            if (!$check) {
                 header('HTTP/1.0 401 Unauthorized');
                 return false;
             }
@@ -603,5 +609,348 @@ class Shop_Payment_System_HandlerXX extends Shop_Payment_System_Handler
         }
         Core_Event::notify('Shop_Payment_System_Handler.onAfterSend', $this);
         return $this;
+    }
+}
+
+if (!interface_exists('JsonSerializable', false)) {
+    interface JsonSerializable
+    {
+        function jsonSerialize();
+    }
+}
+
+/**
+ * Класс чека
+ */
+class YandexMoneyReceipt implements JsonSerializable
+{
+    /** @var string Код валюты - рубли */
+    const CURRENCY_RUB = 'RUB';
+
+    /** @var string Используемая по умолчанию валюта */
+    const DEFAULT_CURRENCY = self::CURRENCY_RUB;
+
+    /** @var int Идентификатор ставки НДС по умолчанию */
+    const DEFAULT_TAX_RATE_ID = 1;
+
+    /** @var YandexMoneyReceiptItem[] Массив с информацией о покупаемых товарах */
+    private $items;
+
+    /** @var string Контакт покупателя, куда будет отправлен чек - либо имэйл, либо номер телефона */
+    private $customerContact;
+
+    /** @var int Идентификатор ставки НДС по умолчанию */
+    private $taxRateId;
+
+    /** @var string Валюта в которой производится платёж */
+    private $currency;
+
+    /** @var YandexMoneyReceiptItem|null Айтем в котором хранится информация о доставке как о товаре */
+    private $shipping;
+
+    /**
+     * @param int $taxRateId
+     * @param string $currency
+     */
+    public function __construct($taxRateId = self::DEFAULT_TAX_RATE_ID, $currency = self::DEFAULT_CURRENCY)
+    {
+        $this->taxRateId = $taxRateId;
+        $this->items = array();
+        $this->currency = $currency;
+    }
+
+    /**
+     * Добавляет в чек товар
+     * @param string $title Название товара
+     * @param float $price Цена товара
+     * @param float $quantity Количество покупаемого товара
+     * @param int|null $taxId Идентификатор ставки НДС для товара или null
+     * @return YandexMoneyReceipt
+     */
+    public function addItem($title, $price, $quantity = 1.0, $taxId = null)
+    {
+        $this->items[] = new YandexMoneyReceiptItem($title, $quantity, $price, false, $taxId);
+        return $this;
+    }
+
+    /**
+     * Добавляет в чек доставку
+     * @param string $title Название способа доставки
+     * @param float $price Цена доставки
+     * @param int|null $taxId Идентификатор ставки НДС для доставки или null
+     * @return YandexMoneyReceipt
+     */
+    public function addShipping($title, $price, $taxId = null)
+    {
+        $this->shipping = new YandexMoneyReceiptItem($title, 1.0, $price, true, $taxId);
+        $this->items[] = $this->shipping;
+        return $this;
+    }
+
+    /**
+     * Устанавливает адрес доставки чека - или имейл или номер телефона
+     * @param string $value Номер телефона или имэйл получателя
+     * @return YandexMoneyReceipt
+     */
+    public function setCustomerContact($value)
+    {
+        $this->customerContact = $value;
+        return $this;
+    }
+
+    /**
+     * Возвращает стоимость заказа исходя из состава чека
+     * @param bool $withShipping Добавить ли к стоимости заказа стоимость доставки
+     * @return float Общая стоимость заказа
+     */
+    public function getAmount($withShipping = true)
+    {
+        $result = 0.0;
+        foreach ($this->items as $item) {
+            if ($withShipping || !$item->isShipping()) {
+                $result += $item->getAmount();
+            }
+        }
+        return $result;
+    }
+
+    /**
+     * Преобразует чек в массив для дальнейшей его отправки в JSON формате
+     * @return array Ассоциативный массив с чеком, готовый для отправки в JSON формате
+     */
+    public function jsonSerialize()
+    {
+        $items = array();
+
+        foreach ($this->items as $item) {
+            if ($item->getPrice() >= 0.0) {
+                $items[] = array(
+                    'quantity' => (string)$item->getQuantity(),
+                    'price' => array(
+                        'amount' => number_format($item->getPrice(), 2, '.', ''),
+                        'currency' => $this->currency,
+                    ),
+                    'tax' => $item->hasTaxId() ? $item->getTaxId() : $this->taxRateId,
+                    'text' => $this->escapeString($item->getTitle()),
+                );
+            }
+        }
+        return array(
+            'items' => $items,
+            'customerContact' => $this->escapeString($this->customerContact),
+        );
+    }
+
+    /**
+     * Сериализует чек в JSON формат
+     * @return string Чек в JSON формате
+     */
+    public function getJson()
+    {
+        if (defined('JSON_UNESCAPED_UNICODE')) {
+            return json_encode($this->jsonSerialize(), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        } else {
+            // для версий PHP которые не поддерживают передачу параметров в json_encode
+            // заменяем в полученной при сериализации строке уникод последовательности
+            // вида \u1234 на их реальное значение в utf-8
+            return preg_replace_callback(
+                '/\\\\u(\w{4})/',
+                array($this, 'legacyReplaceUnicodeMatches'),
+                json_encode($this->jsonSerialize())
+            );
+        }
+    }
+
+    public function legacyReplaceUnicodeMatches($matches)
+    {
+        return html_entity_decode('&#x' . $matches[1] . ';', ENT_COMPAT, 'UTF-8');
+    }
+
+    /**
+     * Подгоняет стоимость товаров в чеке к общей цене заказа
+     * @param float $orderAmount Общая стоимость заказа
+     * @param bool $withShipping Поменять ли заодно и цену доставки
+     * @return YandexMoneyReceipt
+     */
+    public function normalize($orderAmount, $withShipping = false)
+    {
+        if (!$withShipping) {
+            if ($this->shipping !== null) {
+                $orderAmount -= $this->shipping->getAmount();
+            }
+        }
+        $realAmount = $this->getAmount($withShipping);
+        if ($realAmount != $orderAmount) {
+            $coefficient = $orderAmount / $realAmount;
+            $realAmount = 0.0;
+            $aloneId = null;
+            foreach ($this->items as $index => $item) {
+                if ($withShipping || !$item->isShipping()) {
+                    $item->applyDiscountCoefficient($coefficient);
+                    $realAmount += $item->getAmount();
+                    if ($aloneId === null && $item->getQuantity() === 1.0) {
+                        $aloneId = $index;
+                    }
+                }
+            }
+            if ($aloneId === null) {
+                $aloneId = 0;
+            }
+            $diff = $orderAmount - $realAmount;
+            if (abs($diff) >= 0.001) {
+                if ($this->items[$aloneId]->getQuantity() === 1.0) {
+                    $this->items[$aloneId]->increasePrice($diff);
+                } else {
+                    $item = $this->items[0]->fetchItem(1);
+                    $item->increasePrice($diff);
+                    array_splice($this->items, $aloneId + 1, 0, array($item));
+                }
+            }
+        }
+        return $this;
+    }
+
+    /**
+     * Деэскейпирует строку для вставки в JSON
+     * @param string $string Исходная строка
+     * @return string Строка с эскейпированными "<" и ">"
+     */
+    private function escapeString($string)
+    {
+        return str_replace(array('<', '>'), array('&lt;', '&gt;'), html_entity_decode($string));
+    }
+}
+
+/**
+ * Класс товара в чеке
+ */
+class YandexMoneyReceiptItem
+{
+    /** @var string Название товара */
+    private $title;
+
+    /** @var float Количество покупаемого товара */
+    private $quantity;
+
+    /** @var float Цена товара */
+    private $price;
+
+    /** @var bool Является ли наименование доставкой товара */
+    private $shipping;
+
+    /** @var int|null Идентификатор ставки НДС для конкретного товара */
+    private $taxId;
+
+    /**
+     * YandexMoneyReceiptItem constructor.
+     * @param string $title
+     * @param float $quantity
+     * @param float $price
+     * @param bool $isShipping
+     * @param int|null $taxId
+     */
+    public function __construct($title, $quantity, $price, $isShipping, $taxId)
+    {
+        $this->title = mb_substr($title, 0, 60, 'utf-8');
+        $this->quantity = (float)$quantity;
+        $this->price = round($price, 2);
+        $this->shipping = $isShipping;
+        $this->taxId = $taxId;
+    }
+
+    /**
+     * Возвращает цену товара
+     * @return float Цена товара
+     */
+    public function getPrice()
+    {
+        return $this->price;
+    }
+
+    /**
+     * Возвращает общую стоимость позиции в чеке
+     * @return float Стоимость покупаемого товара
+     */
+    public function getAmount()
+    {
+        return round($this->price * $this->quantity, 2);
+    }
+
+    /**
+     * Возвращает название товара
+     * @return string Название товара
+     */
+    public function getTitle()
+    {
+        return $this->title;
+    }
+
+    /**
+     * Возвращает количество покупаемого товара
+     * @return float Количество товара
+     */
+    public function getQuantity()
+    {
+        return $this->quantity;
+    }
+
+    /**
+     * Проверяет, установлена ли для товара ставка НДС
+     * @return bool True если ставка НДС для товара установлена, false если нет
+     */
+    public function hasTaxId()
+    {
+        return $this->taxId !== null;
+    }
+
+    /**
+     * Возвращает ставку НДС товара
+     * @return int|null Идентификатор ставки НДС или null если он не был установлен
+     */
+    public function getTaxId()
+    {
+        return $this->taxId;
+    }
+
+    /**
+     * Привеняет для товара скидку
+     * @param float $value Множитель скидки
+     */
+    public function applyDiscountCoefficient($value)
+    {
+        $this->price = round($value * $this->price, 2);
+    }
+
+    /**
+     * Увеличивает цену товара на указанную величину
+     * @param float $value Сумма на которую цену товара увеличиваем
+     */
+    public function increasePrice($value)
+    {
+        $this->price = round($this->price + $value, 2);
+    }
+
+    /**
+     * Уменьшает количество покупаемого товара на указанное, возвращает объект позиции в чеке с уменьшаемым количеством
+     * @param float $count Количество на которое уменьшаем позицию в чеке
+     * @return YandexMoneyReceiptItem Новый инстанс позиции в чеке
+     */
+    public function fetchItem($count)
+    {
+        if ($count > $this->quantity) {
+            throw new BadMethodCallException();
+        }
+        $result = new YandexMoneyReceiptItem($this->title, $count, $this->price, false, $this->taxId);
+        $this->quantity -= $count;
+        return $result;
+    }
+
+    /**
+     * Проверяет является ли текущая позиция доставкой товара
+     * @return bool True если доставка товара, false если нет
+     */
+    public function isShipping()
+    {
+        return $this->shipping;
     }
 }
