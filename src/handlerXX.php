@@ -282,6 +282,7 @@ class Shop_Payment_System_HandlerXX extends Shop_Payment_System_Handler
             <?php if ($this->mode === self::MODE_KASSA) { ?>
                 <input class="wide" name="scid" value="<?php echo $this->ym_scid; ?>" type="hidden">
                 <input type="hidden" name="ShopID" value="<?php echo $this->ym_shopid; ?>">
+                <input type="hidden" name="sum" value="<?php echo $sum; ?>">
                 <input type="hidden" name="CustomerNumber"
                        value="<?php echo(is_null($oSiteuser) ? 0 : $oSiteuser->id); ?>">
                 <input type="hidden" name="orderNumber" value="<?php echo $this->_shopOrder->id; ?>">
@@ -294,7 +295,7 @@ class Shop_Payment_System_HandlerXX extends Shop_Payment_System_Handler
                                                       value="<?php echo htmlspecialchars($phone); ?>"> <?php } ?>
                 <?php if (isset ($this->sendCheck) && $this->sendCheck) { ?> <input type="hidden"
                                                                                     name="ym_merchant_receipt"
-                                                                                    value='<?php echo $receiptJson; ?>'> <?php } ?>
+                                                                                    value='<?php echo htmlspecialchars($receiptJson, ENT_QUOTES); ?>'> <?php } ?>
             <?php } elseif ($this->mode === self::MODE_MONEY) { ?>
                 <input type="hidden" name="receiver" value="<?php echo htmlspecialchars($this->ym_account); ?>">
                 <input type="hidden" name="formcomment" value="<?php echo htmlspecialchars($sSiteAlias); ?>">
