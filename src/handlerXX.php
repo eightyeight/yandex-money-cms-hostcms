@@ -265,7 +265,7 @@ class Shop_Payment_System_HandlerXX extends Shop_Payment_System_Handler
             unset($item);
             $disc = abs($disc) / $osum;
             foreach ($aShopOrderItems as $item) {
-                $tax_id = false;
+                $tax_id = null;
                 if ($item->shop_item_id) {
                     $tax_id = $item->Shop_Item->shop_tax_id;
                 }
